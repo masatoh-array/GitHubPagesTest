@@ -85,13 +85,121 @@
       color: var(--muted);
       font-size: 12px;
     }
+
+    /* ── UA Inspector ── */
+    .ua-section {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .ua-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .ua-prediction {
+      padding: 16px 18px;
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      background: rgba(88, 166, 255, 0.05);
+    }
+
+    .ua-prediction .ua-pred-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .ua-pred-device {
+      font-size: clamp(15px, 3vw, 20px);
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 2px;
+    }
+
+    .ua-pred-browser {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .ua-pred-badge {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 3px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .ua-badge-mobile   { background: rgba(40,180,100,0.15); color: #3fb27f; }
+    .ua-badge-desktop  { background: rgba(65,105,225,0.15);  color: #4169e1; }
+
+    .ua-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0b0f14;
+    }
+
+    .ua-card-header {
+      padding: 8px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .ua-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .ua-table tr { border-bottom: 1px solid var(--line); }
+    .ua-table tr:last-child { border-bottom: none; }
+
+    .ua-table td {
+      padding: 8px 16px;
+      vertical-align: top;
+    }
+
+    .ua-table td:first-child {
+      color: var(--muted);
+      white-space: nowrap;
+      width: 40%;
+      font-size: 11px;
+    }
+
+    .ua-table td:last-child {
+      word-break: break-all;
+      color: var(--text);
+    }
+
+    .ua-val-true  { color: #3fb27f; }
+    .ua-val-false { color: #d06060; }
+    .ua-val-num   { color: #c9a84c; }
+    .ua-val-na    { color: var(--muted); font-style: italic; }
+    .ua-val-str   { word-break: break-all; line-height: 1.6; font-size: 11px; }
+    .ua-pred-warn { font-size: 11px; color: #c9a84c; margin-top: 6px; }
   </style>
 </head>
 <body>
   <main class="card">
     <div class="label">Developer Preview</div>
     <h1>DEV.NAKOSUKI.COM</h1>
-    <p>公開テスト</p>
 
     <pre class="terminal"><span class="prompt">$</span> ls
 index.html
@@ -99,7 +207,134 @@ index.html
 <span class="prompt">$</span> echo "nako suki!"
 nako suki!</pre>
 
-    <div class="footer">Static / Minimal / Single File</div>
+    <!-- UA Inspector -->
+    <div class="ua-section">
+      <div class="ua-section-title">Client Info</div>
+
+      <div class="ua-prediction" id="ua-prediction"></div>
+
+      <div class="ua-card">
+        <div class="ua-card-header">User Agent</div>
+        <table class="ua-table" id="ua-tbl-ua"></table>
+      </div>
+
+      <div class="ua-card">
+        <div class="ua-card-header">Touch / Pointer</div>
+        <table class="ua-table" id="ua-tbl-touch"></table>
+      </div>
+
+      <div class="ua-card">
+        <div class="ua-card-header">UA Client Hints (userAgentData)</div>
+        <table class="ua-table" id="ua-tbl-uach"></table>
+      </div>
+    </div>
   </main>
+
+  <script>
+    // ── HTMLエスケープ ─────────────────────────────────────────────────
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // ── 値取得 ────────────────────────────────────────────────────────
+    const ua  = navigator.userAgent;
+    const mtp = navigator.maxTouchPoints;
+    const plt = navigator.platform ?? '(なし)';
+    const pc  = window.matchMedia('(pointer: coarse)').matches;
+    const hn  = window.matchMedia('(hover: none)').matches;
+    const ap  = window.matchMedia('(any-pointer: coarse)').matches;
+    const uad = navigator.userAgentData;
+
+    // ── テーブル行ヘルパー ────────────────────────────────────────────
+    function row(label, value, cls) {
+      const td = cls ? `<td class="${esc(cls)}">${value}</td>` : `<td>${value}</td>`;
+      return `<tr><td>${esc(label)}</td>${td}</tr>`;
+    }
+    function boolRow(label, val) {
+      if (val === 'n/a') return row(label, 'n/a', 'ua-val-na');
+      return row(label, String(val), val ? 'ua-val-true' : 'ua-val-false');
+    }
+
+    // ── UA テーブル ───────────────────────────────────────────────────
+    document.getElementById('ua-tbl-ua').innerHTML =
+      row('navigator.userAgent', `<span class="ua-val-str">${esc(ua)}</span>`) +
+      row('navigator.platform', esc(plt), plt === '(なし)' ? 'ua-val-na' : '');
+
+    // ── Touch / Pointer テーブル ──────────────────────────────────────
+    document.getElementById('ua-tbl-touch').innerHTML =
+      row('navigator.maxTouchPoints', esc(String(mtp)), 'ua-val-num') +
+      boolRow('(pointer: coarse)', pc) +
+      boolRow('(hover: none)', hn) +
+      boolRow('(any-pointer: coarse)', ap);
+
+    // ── UA Client Hints テーブル ──────────────────────────────────────
+    if (uad) {
+      const brands = (uad.brands ?? []).map(b => `${esc(b.brand)} ${esc(b.version)}`).join(', ');
+      document.getElementById('ua-tbl-uach').innerHTML =
+        boolRow('userAgentData.mobile', uad.mobile) +
+        row('userAgentData.platform', esc(uad.platform) || '(空)') +
+        row('userAgentData.brands', brands || '(空)');
+    } else {
+      document.getElementById('ua-tbl-uach').innerHTML =
+        `<tr><td colspan="2" class="ua-val-na">このブラウザは UserAgentData（UA Client Hints）に非対応</td></tr>`;
+    }
+
+    // ── 機種・ブラウザ予測 ────────────────────────────────────────────
+    (function predict() {
+      let browser = 'Unknown';
+      if (/CriOS/.test(ua))                               browser = 'Chrome (iOS)';
+      else if (/EdgiOS/.test(ua))                         browser = 'Edge (iOS)';
+      else if (/FxiOS/.test(ua))                          browser = 'Firefox (iOS)';
+      else if (/EdgA/.test(ua))                           browser = 'Edge (Android)';
+      else if (/SamsungBrowser/.test(ua))                 browser = 'Samsung Browser';
+      else if (/OPR|Opera/.test(ua))                      browser = 'Opera';
+      else if (/Firefox/.test(ua))                        browser = 'Firefox';
+      else if (/Edg\//.test(ua))                          browser = 'Edge';
+      else if (/Chrome/.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome';
+      else if (/Safari/.test(ua) && !/Chrome/.test(ua))   browser = 'Safari';
+
+      let device = 'Unknown';
+      let isMobile = false;
+
+      if (/iPhone/.test(ua)) {
+        device = 'iPhone'; isMobile = true;
+      } else if (/iPod/.test(ua)) {
+        device = 'iPod Touch'; isMobile = true;
+      } else if (/iPad/.test(ua)) {
+        device = 'iPad'; isMobile = true;
+      } else if (/Macintosh/.test(ua) && mtp > 1) {
+        device = 'iPad (デスクトップUA偽装)'; isMobile = true;
+      } else if (/Android/.test(ua)) {
+        if (/Tablet/.test(ua))      { device = 'Android タブレット（Tablet）'; isMobile = true; }
+        else if (/Mobile/.test(ua)) { device = 'Android スマートフォン'; isMobile = true; }
+        else                        { device = 'Android タブレット（Mobile なし）'; isMobile = true; }
+      } else if (uad?.mobile === true) {
+        device = 'Mobile (UA Client Hints)'; isMobile = true;
+      } else if (uad?.mobile === false) {
+        device = 'Desktop (UA Client Hints)'; isMobile = false;
+      } else {
+        device = 'Desktop または不明'; isMobile = false;
+      }
+
+      let confidence = '';
+      if (device.includes('偽装'))    confidence = '⚠️ UAのみでは判定不可。maxTouchPoints による推定';
+      else if (device.includes('Mobile なし')) confidence = '⚠️ Mobile トークン不在による消去法';
+
+      const badgeClass = isMobile ? 'ua-badge-mobile' : 'ua-badge-desktop';
+      const badgeLabel = isMobile ? 'MOBILE' : 'DESKTOP';
+
+      document.getElementById('ua-prediction').innerHTML =
+        `<div class="ua-pred-label">予測結果</div>` +
+        `<div class="ua-pred-device">${esc(device)}</div>` +
+        `<div class="ua-pred-browser">${esc(browser)}</div>` +
+        (confidence ? `<div class="ua-pred-warn">${esc(confidence)}</div>` : '') +
+        `<span class="ua-pred-badge ${badgeClass}">${badgeLabel}</span>`;
+    })();
+  </script>
 </body>
 </html>
